@@ -18,6 +18,81 @@ test.describe('Open roles listing', () => {
         await expect(page.getByTestId('role-card')).toHaveCount(expectedRoleCount);
     });
 
+    test('filters roles by department', async ({ page }) => {
+        await page.goto('/');
+        await page.getByTestId('department-filter')
+            .getByRole('checkbox', { name: 'Technology' })
+            .check();
+
+        const frontendRole = page.getByTestId('role-card').filter({
+            has: page.getByRole('heading', { name: 'Senior Frontend Engineer', exact: true }),
+        });
+        const financeRole = page.getByTestId('role-card').filter({
+            has: page.getByRole('heading', { name: 'Financial Analyst', exact: true }),
+        });
+        await expect(frontendRole).toBeVisible();
+        await expect(financeRole).toBeHidden();
+        await expect(page.getByTestId('filter-result-count')).toHaveText('2 roles shown');
+    });
+
+    test('filters roles by location', async ({ page }) => {
+        await page.goto('/');
+        await page.getByTestId('location-filter')
+            .getByRole('checkbox', { name: 'Vancouver, Canada' })
+            .check();
+
+        const clinicalRole = page.getByTestId('role-card').filter({
+            has: page.getByRole('heading', { name: 'Clinical Research Scientist', exact: true }),
+        });
+        const financeRole = page.getByTestId('role-card').filter({
+            has: page.getByRole('heading', { name: 'Financial Analyst', exact: true }),
+        });
+        await expect(clinicalRole).toBeVisible();
+        await expect(financeRole).toBeHidden();
+        await expect(page.getByTestId('filter-result-count')).toHaveText('2 roles shown');
+    });
+
+    test('combines department and location filters', async ({ page }) => {
+        await page.goto('/');
+        await page.getByTestId('department-filter')
+            .getByRole('checkbox', { name: 'Manufacturing & Field Service' })
+            .check();
+        await page.getByTestId('location-filter')
+            .getByRole('checkbox', { name: 'Vancouver, Canada' })
+            .check();
+
+        const matchingRole = page.getByTestId('role-card').filter({
+            has: page.getByRole('heading', { name: 'Manufacturing Process Engineer', exact: true }),
+        });
+        const otherDepartmentRole = page.getByTestId('role-card').filter({
+            has: page.getByRole('heading', { name: 'Clinical Research Scientist', exact: true }),
+        });
+        await expect(matchingRole).toBeVisible();
+        await expect(otherDepartmentRole).toBeHidden();
+        await expect(page.getByTestId('filter-result-count')).toHaveText('1 role shown');
+    });
+
+    test('shows an empty state for no matches and resets all filters', async ({ page }) => {
+        await page.goto('/');
+        await page.getByTestId('department-filter')
+            .getByRole('checkbox', { name: 'Technology' })
+            .check();
+        await page.getByTestId('location-filter')
+            .getByRole('checkbox', { name: 'Woodinville, WA, USA' })
+            .check();
+
+        await expect(page.getByTestId('filter-empty-state')).toBeVisible();
+        await expect(page.getByTestId('filter-result-count')).toHaveText('0 roles shown');
+
+        await page.getByTestId('filter-reset').click();
+        await expect(page.getByTestId('filter-empty-state')).toBeHidden();
+        await expect(page.getByTestId('role-card')).toHaveCount(expectedRoleCount);
+        await expect(page.getByTestId('department-filter').getByRole('checkbox', { name: 'Technology' }))
+            .not.toBeChecked();
+        await expect(page.getByTestId('location-filter').getByRole('checkbox', { name: 'Woodinville, WA, USA' }))
+            .not.toBeChecked();
+    });
+
     test('links through to a role detail page', async ({ page }) => {
         await page.goto('/');
         const firstCard = page.getByTestId('role-card').first();
