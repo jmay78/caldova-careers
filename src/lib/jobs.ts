@@ -7,6 +7,22 @@
  */
 import type { Job } from '../types/job';
 
+/**
+ * Filter jobs by selected departments and locations.
+ * Values within either selection match with OR; active selections combine with AND.
+ */
+export function filterJobs(
+    jobs: Job[],
+    departments: string[],
+    locations: string[],
+): Job[] {
+    return jobs.filter(
+        (job) =>
+            (departments.length === 0 || departments.includes(job.department)) &&
+            (locations.length === 0 || locations.includes(job.location)),
+    );
+}
+
 /** Return jobs sorted by posted date, newest first (does not mutate input). */
 export function sortByNewest(jobs: Job[]): Job[] {
     return [...jobs].sort(

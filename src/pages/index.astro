@@ -12,6 +12,12 @@ const entries = await getCollection('jobs');
 const jobs: Job[] = sortByNewest(
     entries.map((entry) => ({ slug: entry.id, ...entry.data })),
 );
+const departments = [...new Set(jobs.map((job) => job.department))].sort((a, b) =>
+    a.localeCompare(b),
+);
+const locations = [...new Set(jobs.map((job) => job.location))].sort((a, b) =>
+    a.localeCompare(b),
+);
 ---
 
 <Layout title="Caldova Careers — Open roles">
@@ -29,12 +35,161 @@ const jobs: Job[] = sortByNewest(
     {jobs.length === 0 ? (
       <EmptyState text="There are no open roles right now. Check back soon." />
     ) : (
-      <div
-        class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
-        data-testid="roles-grid"
-      >
-        {jobs.map((job) => <RoleCard job={job} />)}
-      </div>
+      <>
+        <section
+          aria-labelledby="role-filters-heading"
+          class="mb-8 rounded-xl border border-slate-700 bg-slate-900/40 p-4 sm:p-6"
+          data-testid="role-filters"
+        >
+          <div class="mb-5 flex flex-wrap items-center justify-between gap-3">
+            <h3 id="role-filters-heading" class="text-lg font-semibold text-slate-100">
+              Filter roles
+            </h3>
+            <button
+              type="button"
+              class="rounded-md border border-slate-600 px-3 py-2 text-sm font-medium text-slate-200 hover:border-blue-400 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400"
+              data-testid="filter-reset"
+            >
+              Clear filters
+            </button>
+          </div>
+
+          <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <fieldset
+              class="rounded-lg border border-slate-700 bg-slate-800/50 p-4"
+              data-testid="department-filter"
+            >
+              <legend class="px-1 text-sm font-semibold text-slate-200">Department</legend>
+              <div class="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2">
+                {departments.map((department) => (
+                  <label class="flex cursor-pointer items-start gap-2 rounded px-1 py-1 text-sm text-slate-300">
+                    <input
+                      type="checkbox"
+                      name="department"
+                      value={department}
+                      class="mt-0.5 size-4 shrink-0 rounded border-slate-600 bg-slate-900 text-blue-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400"
+                    />
+                    <span>{department}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+
+            <fieldset
+              class="rounded-lg border border-slate-700 bg-slate-800/50 p-4"
+              data-testid="location-filter"
+            >
+              <legend class="px-1 text-sm font-semibold text-slate-200">Location</legend>
+              <div class="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2">
+                {locations.map((location) => (
+                  <label class="flex cursor-pointer items-start gap-2 rounded px-1 py-1 text-sm text-slate-300">
+                    <input
+                      type="checkbox"
+                      name="location"
+                      value={location}
+                      class="mt-0.5 size-4 shrink-0 rounded border-slate-600 bg-slate-900 text-blue-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400"
+                    />
+                    <span>{location}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          </div>
+
+          <p
+            class="mt-4 text-sm text-slate-400"
+            aria-live="polite"
+            data-testid="filter-result-count"
+          >
+            {jobs.length} {jobs.length === 1 ? 'role' : 'roles'} shown
+          </p>
+        </section>
+
+        <div
+          class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3"
+          data-testid="roles-grid"
+        >
+          {jobs.map((job) => <RoleCard job={job} />)}
+        </div>
+        <div hidden data-testid="filter-empty-state">
+          <EmptyState text="No roles match your selected filters. Try changing or clearing them." />
+        </div>
+        <div hidden id="role-data" data-jobs={JSON.stringify(jobs)}></div>
+      </>
     )}
   </div>
 </Layout>
+
+<script>
+  import { filterJobs } from '../lib/jobs';
+  import type { Job } from '../types/job';
+
+  const filterControls = document.querySelector<HTMLElement>('[data-testid="role-filters"]');
+  const roleGrid = document.querySelector<HTMLElement>('[data-testid="roles-grid"]');
+  const emptyState = document.querySelector<HTMLElement>('[data-testid="filter-empty-state"]');
+  const resetButton = document.querySelector<HTMLButtonElement>('[data-testid="filter-reset"]');
+  const resultCount = document.querySelector<HTMLElement>('[data-testid="filter-result-count"]');
+  const roleData = document.querySelector<HTMLElement>('#role-data');
+
+  if (roleData) {
+    const serializedJobs = roleData.dataset.jobs;
+    if (!serializedJobs) {
+      throw new Error('The role filter data is missing.');
+    }
+    const jobs: Job[] = JSON.parse(serializedJobs);
+
+    if (jobs.length > 0) {
+      if (!filterControls || !roleGrid || !emptyState || !resetButton || !resultCount) {
+        throw new Error('The role filter controls are unavailable.');
+      }
+
+      const roleCards = new Map<string, HTMLElement>();
+      for (const card of roleGrid.querySelectorAll<HTMLElement>('[data-testid="role-card"]')) {
+        const jobId = card.dataset.jobId;
+        if (jobId) {
+          roleCards.set(jobId, card);
+        }
+      }
+
+      /** Return checked filter values for the named filter group. */
+      const selectedValues = (name: string): string[] =>
+        Array.from(
+          filterControls.querySelectorAll<HTMLInputElement>(
+            `input[name="${name}"]:checked`,
+          ),
+        ).map((input) => input.value);
+
+      /** Update visible role cards, the empty state, and the live result count. */
+      const updateResults = (): void => {
+        const filteredJobs = filterJobs(
+          jobs,
+          selectedValues('department'),
+          selectedValues('location'),
+        );
+        const visibleJobIds = new Set(filteredJobs.map((job) => job.slug));
+
+        for (const [jobId, card] of roleCards) {
+          card.hidden = !visibleJobIds.has(jobId);
+        }
+
+        emptyState.hidden = filteredJobs.length > 0;
+        resultCount.textContent = `${filteredJobs.length} ${
+          filteredJobs.length === 1 ? 'role' : 'roles'
+        } shown`;
+      };
+
+      /** Clear all selected filters and restore every role card. */
+      const resetFilters = (): void => {
+        for (const checkbox of filterControls.querySelectorAll<HTMLInputElement>(
+          'input[type="checkbox"]',
+        )) {
+          checkbox.checked = false;
+        }
+        updateResults();
+      };
+
+      filterControls.addEventListener('change', updateResults);
+      resetButton.addEventListener('click', resetFilters);
+    }
+  }
+</script>
